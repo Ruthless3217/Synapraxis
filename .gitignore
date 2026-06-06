@@ -1,0 +1,72 @@
+# ========================
+# Dependencies & Build
+# ========================
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# ========================
+# Environment & Secrets
+# ========================
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ========================
+# IDE & Editor
+# ========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ========================
+# Build Output
+# ========================
+frontend/dist/
+frontend/.tsbuildinfo
+backend/*.pyc
+
+# ========================
+# Docker
+# ========================
+docker-compose.override.yml
+
+# ========================
+# OS Files
+# ========================
+*.log
+*.tmp
+*.bak
+
+# ========================
+# Misc project files (not part of source)
+# ========================
+*.docx
+architect-audit.skill
