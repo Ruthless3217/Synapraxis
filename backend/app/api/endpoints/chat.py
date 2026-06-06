@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 import os
 import logging
 import litellm
 from litellm import acompletion
+from app.api.deps import get_current_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ def _is_provider_configured(provider: str) -> bool:
     return bool(api_key and api_key.strip())
 
 @router.post("/tutor", response_model=ChatResponse)
-async def tutor_chat(request: ChatRequest):
+async def tutor_chat(request: ChatRequest, user_id: int = Depends(get_current_user_id)):
     topic = request.current_topic
     user_msg = request.message
     
@@ -76,7 +77,7 @@ async def tutor_chat(request: ChatRequest):
         if p != preferred and _is_provider_configured(p):
             providers_to_try.append(p)
             
-    logger.info(f"Configured providers for chat fallback: {providers_to_try}")
+    logger.info(f"Configured providers for chat fallback [User: {user_id}]: {providers_to_try}")
     
     for provider in providers_to_try:
         try:
@@ -100,6 +101,7 @@ async def _chat_with_litellm(system_prompt: str, user_msg: str, history: List[Ch
     
     # Format messages for standard OpenAI format (accepted by LiteLLM)
     messages = [{"role": "system", "content": system_prompt}]
+    
     # Limit context history to the last 10 messages to avoid token bloat and latency spikes
     for h in history[-10:]:
         # Map roles to "user" or "assistant"

@@ -169,18 +169,23 @@ class SimpleLLMLessonService(ILessonGenerationService):
         if provider != "claude":
             kwargs["response_format"] = {"type": "json_object"}
             
+        import re
         response = await acompletion(**kwargs)
         response_text = response.choices[0].message.content.strip()
         
-        # Clean potential markdown code fences
-        if response_text.startswith("```json"):
-            response_text = response_text[7:]
-        if response_text.startswith("```"):
-            response_text = response_text[3:]
-        if response_text.endswith("```"):
-            response_text = response_text[:-3]
-        response_text = response_text.strip()
-        
+        # Robust JSON extraction (Option A)
+        match = re.search(r"(\{.*\})", response_text, re.DOTALL)
+        if match:
+            response_text = match.group(1)
+        else:
+            if response_text.startswith("```json"):
+                response_text = response_text[7:]
+            if response_text.startswith("```"):
+                response_text = response_text[3:]
+            if response_text.endswith("```"):
+                response_text = response_text[:-3]
+            response_text = response_text.strip()
+            
         lesson_data = json.loads(response_text)
         return LessonResponse(**lesson_data)
 

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLessonStore } from '../store/useLessonStore';
 import { MessageSquare, FileText, BarChart3, Map, Send, FileEdit, Trash2, BrainCircuit, Check } from 'lucide-react';
-import { api } from '../config/api';
+import { api, authFetch } from '../config/api';
 
 export const RightPanel: React.FC = () => {
   const {
@@ -47,7 +47,7 @@ export const RightPanel: React.FC = () => {
         content: msg.content
       }));
 
-      const response = await fetch(api.chat.tutor, {
+      const response = await authFetch(api.chat.tutor, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

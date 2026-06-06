@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from dotenv import load_dotenv
 import logging
+import os
 
 # Load environment variables
 load_dotenv()
@@ -15,7 +16,7 @@ logging.basicConfig(
 )
 
 # Import API routers
-from app.api.endpoints import lesson, chat, user, paths
+from app.api.endpoints import lesson, chat, user, paths, auth
 
 app = FastAPI(
     title="Synapraxis AI API",
@@ -23,15 +24,32 @@ app = FastAPI(
     version="1.0.0"
 )
 
+@app.middleware("http")
+async def rewrite_firebase_prefix(request, call_next):
+    path = request.url.path
+    if path.startswith("/_/backend"):
+        request.scope["path"] = path[len("/_/backend"):]
+        if "raw_path" in request.scope:
+            request.scope["raw_path"] = request.scope["raw_path"][len(b"/_/backend"):]
+    response = await call_next(request)
+    return response
+
 @app.on_event("startup")
 def on_startup():
     from app.services.db_service import init_db
     init_db()
 
-# Enable CORS for the frontend Vite development server (usually http://localhost:5173 or * for safety in local dev)
+# Tighten CORS origins (Option A)
+allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "")
+if allowed_origins_str:
+    allowed_origins = [o.strip() for o in allowed_origins_str.split(",") if o.strip()]
+else:
+    # Default to common frontend ports (Vite dev, Docker deploy)
+    allowed_origins = ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000", "http://127.0.0.1:5173"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -46,6 +64,7 @@ def read_root():
     }
 
 # Include routers
+app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(lesson.router, prefix="/api/lesson", tags=["Lesson"])
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 app.include_router(user.router, prefix="/api/user", tags=["User"])

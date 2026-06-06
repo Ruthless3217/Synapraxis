@@ -1,12 +1,14 @@
 import os
 import json
 import logging
-from fastapi import APIRouter, HTTPException, Query
+import re
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 import litellm
 from litellm import acompletion
 from app.services import db_service
+from app.api.deps import get_current_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +78,7 @@ def _is_provider_configured(provider: str) -> bool:
     return bool(api_key and api_key.strip())
 
 @router.post("/generate", response_model=PathResponse)
-async def generate_path(request: CreatePathRequest):
+async def generate_path(request: CreatePathRequest, user_id: int = Depends(get_current_user_id)):
     query = request.query
     
     preferred = (request.provider or os.getenv("LLM_PROVIDER", "gemini")).lower()
@@ -111,14 +113,18 @@ async def generate_path(request: CreatePathRequest):
             response = await acompletion(**kwargs)
             response_text = response.choices[0].message.content.strip()
             
-            # Clean markdown code fences
-            if response_text.startswith("```json"):
-                response_text = response_text[7:]
-            if response_text.startswith("```"):
-                response_text = response_text[3:]
-            if response_text.endswith("```"):
-                response_text = response_text[:-3]
-            response_text = response_text.strip()
+            # Robust JSON extraction (Option A)
+            match = re.search(r"(\{.*\})", response_text, re.DOTALL)
+            if match:
+                response_text = match.group(1)
+            else:
+                if response_text.startswith("```json"):
+                    response_text = response_text[7:]
+                if response_text.startswith("```"):
+                    response_text = response_text[3:]
+                if response_text.endswith("```"):
+                    response_text = response_text[:-3]
+                response_text = response_text.strip()
             
             response_json = json.loads(response_text)
             break
@@ -149,8 +155,8 @@ async def generate_path(request: CreatePathRequest):
             "status": "active" if s["order"] == 1 else "pending"
         })
         
-    # Save path in DB
-    path_id = db_service.create_learning_path(response_json["title"], query, steps)
+    # Save path in DB for this authenticated user
+    path_id = db_service.create_learning_path(user_id, response_json["title"], query, steps)
     
     return PathResponse(
         id=path_id,
@@ -161,9 +167,9 @@ async def generate_path(request: CreatePathRequest):
     )
 
 @router.get("/all", response_model=List[PathResponse])
-async def get_all_paths():
+async def get_all_paths(user_id: int = Depends(get_current_user_id)):
     try:
-        paths = db_service.get_learning_paths()
+        paths = db_service.get_learning_paths(user_id)
         return [
             PathResponse(
                 id=p["id"],
@@ -179,9 +185,9 @@ async def get_all_paths():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{path_id}", response_model=PathResponse)
-async def get_path(path_id: int):
+async def get_path(path_id: int, user_id: int = Depends(get_current_user_id)):
     try:
-        p = db_service.get_learning_path_by_id(path_id)
+        p = db_service.get_learning_path_by_id(user_id, path_id)
         if not p:
             raise HTTPException(status_code=404, detail="Path not found")
         return PathResponse(
@@ -198,9 +204,9 @@ async def get_path(path_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/{path_id}/step", response_model=List[PathStep])
-async def update_step_status(path_id: int, request: StepStatusUpdateRequest):
+async def update_step_status(path_id: int, request: StepStatusUpdateRequest, user_id: int = Depends(get_current_user_id)):
     try:
-        steps = db_service.update_path_step_status(path_id, request.step_order, request.status)
+        steps = db_service.update_path_step_status(user_id, path_id, request.step_order, request.status)
         if not steps:
             raise HTTPException(status_code=404, detail="Path not found")
         
@@ -211,7 +217,7 @@ async def update_step_status(path_id: int, request: StepStatusUpdateRequest):
             
             # Find next pending step order
             next_step = request.step_order + 1
-            cursor.execute("SELECT steps FROM learning_paths WHERE id = ?", (path_id,))
+            cursor.execute("SELECT steps FROM learning_paths WHERE user_id = ? AND id = ?", (user_id, path_id))
             row = cursor.fetchone()
             
             if row:
@@ -221,8 +227,8 @@ async def update_step_status(path_id: int, request: StepStatusUpdateRequest):
                         s["status"] = "active"
                 
                 cursor.execute(
-                    "UPDATE learning_paths SET steps = ?, current_step = ? WHERE id = ?",
-                    (json.dumps(path_steps), next_step, path_id)
+                    "UPDATE learning_paths SET steps = ?, current_step = ? WHERE user_id = ? AND id = ?",
+                    (json.dumps(path_steps), next_step, user_id, path_id)
                 )
                 conn.commit()
                 steps = path_steps
@@ -242,11 +248,11 @@ async def update_step_status(path_id: int, request: StepStatusUpdateRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/{path_id}/activate")
-async def activate_path(path_id: int):
+async def activate_path(path_id: int, user_id: int = Depends(get_current_user_id)):
     try:
         conn = db_service.get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("UPDATE user_profile SET active_path_id = ? WHERE id = 1", (path_id,))
+        cursor.execute("UPDATE user_profile SET active_path_id = ? WHERE user_id = ?", (path_id, user_id))
         conn.commit()
         conn.close()
         return {"status": "success"}

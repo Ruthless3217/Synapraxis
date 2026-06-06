@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import type { LessonResponse, ChatMessage } from '../types/lesson';
-import { api } from '../config/api';
+import { api, authFetch } from '../config/api';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut, 
+  signInWithPopup 
+} from 'firebase/auth';
+import { auth, googleProvider } from '../config/firebase';
 
 export interface PathStep {
   order: number;
@@ -31,13 +38,24 @@ export interface RecentLesson {
 }
 
 interface LessonState {
+  // Auth states
+  token: string | null;
+  isAuthenticated: boolean;
+  authError: string | null;
+  authLoading: boolean;
+  login: (email: string, password: string) => Promise<boolean>;
+  signup: (email: string, password: string) => Promise<boolean>;
+  googleLogin: () => Promise<boolean>;
+  logout: () => Promise<void>;
+  clearAuthError: () => void;
+
   // Core states
   currentTopic: string;
   currentLesson: LessonResponse | null;
   isLoading: boolean;
   error: string | null;
   
-  // View mode: 'home' = search/landing, 'lesson' = active classroom, 'dashboard' = general progress dashboard
+  // View mode
   viewMode: 'home' | 'lesson' | 'dashboard';
   setViewMode: (mode: 'home' | 'lesson' | 'dashboard') => void;
   
@@ -113,6 +131,121 @@ interface LessonState {
 }
 
 export const useLessonStore = create<LessonState>((set, get) => ({
+  // Auth Initial State
+  token: localStorage.getItem('synapraxis_token'),
+  isAuthenticated: localStorage.getItem('synapraxis_token') !== null,
+  authError: null,
+  authLoading: false,
+
+  clearAuthError: () => set({ authError: null }),
+
+  login: async (email, password) => {
+    set({ authLoading: true, authError: null });
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const token = await userCredential.user.getIdToken();
+      localStorage.setItem('synapraxis_token', token);
+      set({ 
+        token: token, 
+        isAuthenticated: true, 
+        authLoading: false,
+        viewMode: 'home' 
+      });
+      // Fetch stats immediately
+      await get().fetchProfile();
+      await get().fetchPaths();
+      return true;
+    } catch (err: any) {
+      // Clean up Firebase error messages if they look like "Firebase: Error (auth/invalid-credential)."
+      let errMsg = err.message || 'Failed to login';
+      if (errMsg.includes('auth/invalid-credential') || errMsg.includes('auth/user-not-found') || errMsg.includes('auth/wrong-password')) {
+        errMsg = 'Incorrect email or password.';
+      } else if (errMsg.includes('auth/invalid-email')) {
+        errMsg = 'Please enter a valid email address.';
+      }
+      set({ authError: errMsg, authLoading: false });
+      return false;
+    }
+  },
+
+  signup: async (email, password) => {
+    set({ authLoading: true, authError: null });
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const token = await userCredential.user.getIdToken();
+      localStorage.setItem('synapraxis_token', token);
+      set({ 
+        token: token, 
+        isAuthenticated: true, 
+        authLoading: false,
+        viewMode: 'home'
+      });
+      // Fetch stats immediately (will return 0 XP, 0 Streak for new user)
+      await get().fetchProfile();
+      await get().fetchPaths();
+      return true;
+    } catch (err: any) {
+      let errMsg = err.message || 'Failed to sign up';
+      if (errMsg.includes('auth/email-already-in-use')) {
+        errMsg = 'A user with this email address already exists.';
+      } else if (errMsg.includes('auth/weak-password')) {
+        errMsg = 'Password is too weak. Must be at least 6 characters.';
+      } else if (errMsg.includes('auth/invalid-email')) {
+        errMsg = 'Please enter a valid email address.';
+      }
+      set({ authError: errMsg, authLoading: false });
+      return false;
+    }
+  },
+
+  googleLogin: async () => {
+    set({ authLoading: true, authError: null });
+    try {
+      const userCredential = await signInWithPopup(auth, googleProvider);
+      const token = await userCredential.user.getIdToken();
+      localStorage.setItem('synapraxis_token', token);
+      set({ 
+        token: token, 
+        isAuthenticated: true, 
+        authLoading: false,
+        viewMode: 'home' 
+      });
+      // Fetch stats immediately
+      await get().fetchProfile();
+      await get().fetchPaths();
+      return true;
+    } catch (err: any) {
+      // Ignore if user closed popup
+      if (err.code === 'auth/popup-closed-by-user') {
+        set({ authLoading: false });
+        return false;
+      }
+      set({ authError: err.message || 'Failed to sign in with Google', authLoading: false });
+      return false;
+    }
+  },
+
+  logout: async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error("Firebase signOut failed:", err);
+    }
+    localStorage.removeItem('synapraxis_token');
+    set({ 
+      token: null, 
+      isAuthenticated: false, 
+      viewMode: 'home',
+      currentLesson: null,
+      recentLessons: [],
+      activePath: null,
+      allPaths: [],
+      xp: 0,
+      streak: 0,
+      dailyConceptsCompleted: 0
+    });
+  },
+
   // Core states
   currentTopic: '',
   currentLesson: null,
@@ -145,9 +278,9 @@ export const useLessonStore = create<LessonState>((set, get) => ({
   isNarrating: false,
   currentUtteranceIndex: 0,
   
-  // Stats
-  streak: 3,
-  xp: 170,
+  // Stats - default initial values (will be updated dynamically by fetchProfile)
+  streak: 0,
+  xp: 0,
   dailyConceptsCompleted: 0,
   
   // Profile
@@ -165,7 +298,6 @@ export const useLessonStore = create<LessonState>((set, get) => ({
   setTopic: (topic) => set({ currentTopic: topic }),
   setLesson: (lesson) => {
     if (lesson) {
-      // If a lesson is set, load its saved completed concepts and quiz score if they exist
       const completed = (lesson as any).completed_concepts || [];
       const score = (lesson as any).quiz_score;
       set({ 
@@ -214,10 +346,11 @@ export const useLessonStore = create<LessonState>((set, get) => ({
     currentUtteranceIndex: 0
   })),
   
-  // Sync Actions
+  // Sync Actions via authFetch
   fetchProfile: async () => {
+    if (!get().isAuthenticated) return;
     try {
-      const response = await fetch(api.user.profile);
+      const response = await authFetch(api.user.profile);
       if (response.ok) {
         const data = await response.json();
         set({
@@ -227,14 +360,17 @@ export const useLessonStore = create<LessonState>((set, get) => ({
           recentLessons: data.recent_lessons
         });
         
-        // Also fetch active path if one is set
         if (data.active_path_id) {
-          const pathRes = await fetch(api.path.detail(data.active_path_id));
+          const pathRes = await authFetch(api.path.detail(data.active_path_id));
           if (pathRes.ok) {
             const pathData = await pathRes.json();
             set({ activePath: pathData });
           }
+        } else {
+          set({ activePath: null });
         }
+      } else if (response.status === 401) {
+        get().logout();
       }
     } catch (err) {
       console.error("Failed to fetch user profile:", err);
@@ -252,7 +388,7 @@ export const useLessonStore = create<LessonState>((set, get) => ({
     set({ completedConcepts: updated });
     
     try {
-      const response = await fetch(api.user.conceptComplete, {
+      const response = await authFetch(api.user.conceptComplete, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -278,8 +414,9 @@ export const useLessonStore = create<LessonState>((set, get) => ({
           }
         }
         
-        // Refresh profile to get updated recent lessons
         get().fetchProfile();
+      } else if (response.status === 401) {
+        get().logout();
       }
     } catch (err) {
       console.error("Failed to sync concept completion:", err);
@@ -303,7 +440,7 @@ export const useLessonStore = create<LessonState>((set, get) => ({
     });
     
     try {
-      const response = await fetch(api.user.quizSubmit, {
+      const response = await authFetch(api.user.quizSubmit, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -318,8 +455,9 @@ export const useLessonStore = create<LessonState>((set, get) => ({
           streak: data.streak
         });
         
-        // Refresh profile
         get().fetchProfile();
+      } else if (response.status === 401) {
+        get().logout();
       }
     } catch (err) {
       console.error("Failed to submit quiz score:", err);
@@ -327,11 +465,14 @@ export const useLessonStore = create<LessonState>((set, get) => ({
   },
   
   fetchPaths: async () => {
+    if (!get().isAuthenticated) return;
     try {
-      const response = await fetch(api.path.all);
+      const response = await authFetch(api.path.all);
       if (response.ok) {
         const data = await response.json();
         set({ allPaths: data });
+      } else if (response.status === 401) {
+        get().logout();
       }
     } catch (err) {
       console.error("Failed to fetch learning paths:", err);
@@ -341,7 +482,7 @@ export const useLessonStore = create<LessonState>((set, get) => ({
   createLearningPath: async (query) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await fetch(api.path.generate, {
+      const response = await authFetch(api.path.generate, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -350,17 +491,20 @@ export const useLessonStore = create<LessonState>((set, get) => ({
         })
       });
       if (!response.ok) {
+        if (response.status === 401) {
+          get().logout();
+          throw new Error("Session expired. Please log in again.");
+        }
         throw new Error("Failed to generate learning path");
       }
       const data = await response.json();
       set({ 
         activePath: data,
-        viewMode: 'lesson' // switch view mode to show path
+        viewMode: 'lesson' 
       });
       
-      // Refresh list of paths & profile
-      get().fetchPaths();
-      get().fetchProfile();
+      await get().fetchPaths();
+      await get().fetchProfile();
     } catch (err: any) {
       set({ error: err.message || "Failed to generate learning path" });
     } finally {
@@ -370,7 +514,7 @@ export const useLessonStore = create<LessonState>((set, get) => ({
   
   completePathStep: async (pathId, stepOrder) => {
     try {
-      const response = await fetch(api.path.updateStep(pathId), {
+      const response = await authFetch(api.path.updateStep(pathId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -390,9 +534,10 @@ export const useLessonStore = create<LessonState>((set, get) => ({
           });
         }
         
-        // Refresh paths & profile
-        get().fetchPaths();
-        get().fetchProfile();
+        await get().fetchPaths();
+        await get().fetchProfile();
+      } else if (response.status === 401) {
+        get().logout();
       }
     } catch (err) {
       console.error("Failed to complete path step:", err);
@@ -401,16 +546,18 @@ export const useLessonStore = create<LessonState>((set, get) => ({
   
   activateLearningPath: async (pathId) => {
     try {
-      const response = await fetch(api.path.activate(pathId), {
+      const response = await authFetch(api.path.activate(pathId), {
         method: 'POST'
       });
       if (response.ok) {
-        const pathRes = await fetch(api.path.detail(pathId));
+        const pathRes = await authFetch(api.path.detail(pathId));
         if (pathRes.ok) {
           const pathData = await pathRes.json();
           set({ activePath: pathData });
         }
-        get().fetchProfile();
+        await get().fetchProfile();
+      } else if (response.status === 401) {
+        get().logout();
       }
     } catch (err) {
       console.error("Failed to activate learning path:", err);

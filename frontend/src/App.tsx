@@ -8,10 +8,13 @@ import { VideoPlayer } from './components/VideoPlayer';
 import { LessonContent } from './components/LessonContent';
 import { RightPanel } from './components/RightPanel';
 import { Sparkles, ArrowLeft, BookOpen, Clock, AlertTriangle } from 'lucide-react';
-import { api } from './config/api';
+import { api, authFetch } from './config/api';
+
+import { AuthScreen } from './components/AuthScreen';
 
 const App: React.FC = () => {
   const {
+    isAuthenticated,
     currentLesson,
     isLoading,
     error,
@@ -29,11 +32,17 @@ const App: React.FC = () => {
     fetchPaths
   } = useLessonStore();
 
-  // Load user profile statistics and streaks on mount
+  // Load user profile statistics and streaks on mount when authenticated
   useEffect(() => {
-    fetchProfile();
-    fetchPaths();
-  }, []);
+    if (isAuthenticated) {
+      fetchProfile();
+      fetchPaths();
+    }
+  }, [isAuthenticated]);
+
+  if (!isAuthenticated) {
+    return <AuthScreen />;
+  }
 
   const handleSearchTopic = async (topic: string) => {
     if (!topic.trim()) return;
@@ -44,7 +53,7 @@ const App: React.FC = () => {
     resetLessonState();
 
     try {
-      const response = await fetch(api.lesson.generate({
+      const response = await authFetch(api.lesson.generate({
         topic: topic,
         level: userLevel,
         age_group: ageGroup,

@@ -6,6 +6,7 @@ from app.services.lesson_service_interface import ILessonGenerationService
 from app.services.lesson_service_simple import SimpleLLMLessonService
 from app.services import db_service
 from app.services.cache_service import cache_service
+from app.api.deps import get_current_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +19,6 @@ def get_lesson_service() -> ILessonGenerationService:
     can be plugged in. When you build the multi-agent system, simply return the
     agentic service here (e.g. based on an environment variable configuration).
     """
-    # Future swap example:
-    # if os.getenv("BACKEND_MODE") == "agentic":
-    #     return MultiAgentLessonService()
     return SimpleLLMLessonService()
 
 @router.get("/generate")
@@ -30,14 +28,15 @@ async def generate_lesson(
     age_group: str = Query("Adult", description="Age level: Kids | Teen | Adult | Expert"),
     language: str = Query("English", description="Language of the lesson"),
     provider: Optional[str] = Query(None, description="Force a specific LLM provider (gemini, groq, mistral, cohere, claude)"),
-    service: ILessonGenerationService = Depends(get_lesson_service)
+    service: ILessonGenerationService = Depends(get_lesson_service),
+    user_id: int = Depends(get_current_user_id)
 ):
     topic_clean = topic.strip()
-    logger.info(f"Received request to generate lesson for topic: '{topic_clean}' [Level: {level}, Age Group: {age_group}, Provider: {provider}]")
+    logger.info(f"Received request to generate lesson for topic: '{topic_clean}' [User: {user_id}, Level: {level}, Age Group: {age_group}, Provider: {provider}]")
     
     try:
         # 1. Check SQLite database history first (retains progress, completed concepts, quiz scores)
-        existing = db_service.get_lesson_data(topic_clean)
+        existing = db_service.get_lesson_data(user_id, topic_clean)
         if existing and existing.get("level") == level and existing.get("age_group") == age_group:
             logger.info(f"Returning persisted lesson from SQLite for: '{topic_clean}'")
             return existing
@@ -47,8 +46,9 @@ async def generate_lesson(
         cached = cache_service.get(cache_key)
         if cached:
             logger.info(f"Returning cached lesson from Redis/Memory cache for: '{topic_clean}'")
-            # Save to SQLite history for future tracking
+            # Save to SQLite history for this user
             db_service.add_lesson_to_history(
+                user_id=user_id,
                 topic=topic_clean,
                 title=cached["title"],
                 emoji=cached["emoji"],
@@ -73,6 +73,7 @@ async def generate_lesson(
         
         # Save to SQLite history
         db_service.add_lesson_to_history(
+            user_id=user_id,
             topic=topic_clean,
             title=lesson.title,
             emoji=lesson.emoji,

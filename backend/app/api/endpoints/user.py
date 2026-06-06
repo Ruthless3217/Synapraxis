@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 import logging
 from app.services import db_service
+from app.api.deps import get_current_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +25,10 @@ class QuizSubmitRequest(BaseModel):
     score: int
 
 @router.get("/profile", response_model=ProfileResponse)
-async def get_profile():
+async def get_profile(user_id: int = Depends(get_current_user_id)):
     try:
-        profile = db_service.get_user_profile()
-        recent = db_service.get_lessons_history()
+        profile = db_service.get_user_profile(user_id)
+        recent = db_service.get_lessons_history(user_id)
         
         return ProfileResponse(
             xp=profile["xp"],
@@ -41,10 +42,10 @@ async def get_profile():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/concept-complete")
-async def complete_concept(request: ConceptCompleteRequest):
+async def complete_concept(request: ConceptCompleteRequest, user_id: int = Depends(get_current_user_id)):
     try:
-        completed = db_service.update_concept_completion(request.topic, request.concept_name)
-        profile = db_service.get_user_profile()
+        completed = db_service.update_concept_completion(user_id, request.topic, request.concept_name)
+        profile = db_service.get_user_profile(user_id)
         return {
             "status": "success",
             "completed_concepts": completed,
@@ -57,10 +58,10 @@ async def complete_concept(request: ConceptCompleteRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/quiz-submit")
-async def submit_quiz_score(request: QuizSubmitRequest):
+async def submit_quiz_score(request: QuizSubmitRequest, user_id: int = Depends(get_current_user_id)):
     try:
-        db_service.update_quiz_score(request.topic, request.score)
-        profile = db_service.get_user_profile()
+        db_service.update_quiz_score(user_id, request.topic, request.score)
+        profile = db_service.get_user_profile(user_id)
         return {
             "status": "success",
             "xp": profile["xp"],

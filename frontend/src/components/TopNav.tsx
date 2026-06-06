@@ -7,7 +7,7 @@ interface TopNavProps {
 }
 
 export const TopNav: React.FC<TopNavProps> = ({ onNavigateHome }) => {
-  const { streak, xp, currentLesson, provider, setProvider, viewMode, setViewMode } = useLessonStore();
+  const { streak, xp, currentLesson, provider, setProvider, viewMode, setViewMode, logout } = useLessonStore();
 
   const handleLogoClick = () => {
     setViewMode('home');
@@ -31,7 +31,7 @@ export const TopNav: React.FC<TopNavProps> = ({ onNavigateHome }) => {
         </div>
 
         {/* Global Navigation Links */}
-        <div className="flex items-center gap-1 bg-canvas p-1 rounded-xl border border-border-custom/50">
+        <div className="flex items-center gap-1 bg-canvas p-1 rounded-xl border border-border-custom/55 mb-0 shadow-sm">
           <button
             onClick={() => setViewMode('home')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -100,9 +100,17 @@ export const TopNav: React.FC<TopNavProps> = ({ onNavigateHome }) => {
         </div>
 
         {/* User Badge / Avatar */}
-        <div className="w-9 h-9 rounded-full bg-accent2/25 border-2 border-primary flex items-center justify-center text-primary font-bold text-sm shadow-inner cursor-pointer hover:opacity-85 transition-opacity">
+        <button 
+          onClick={() => {
+            if (window.confirm("Are you sure you want to sign out?")) {
+              logout();
+            }
+          }}
+          className="w-9 h-9 rounded-full bg-accent2/25 border-2 border-primary flex items-center justify-center text-primary font-bold text-sm shadow-inner cursor-pointer hover:opacity-85 transition-opacity"
+          title="Sign out of Synapraxis"
+        >
           YA
-        </div>
+        </button>
       </div>
     </nav>
   );
