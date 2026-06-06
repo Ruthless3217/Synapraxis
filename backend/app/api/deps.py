@@ -21,9 +21,8 @@ async def get_current_user_id(authorization: str = Header(..., description="Bear
     try:
         # A JWT token contains exactly two dots
         if token.count('.') == 2:
-            # Note: in a local test scenario with dummy-project-id, verify_oauth2_token might fail.
-            # We wrap it and fall back to local session if it fails.
-            decoded_token = id_token.verify_oauth2_token(
+            from google.oauth2.id_token import verify_firebase_token
+            decoded_token = verify_firebase_token(
                 token,
                 google_requests.Request(),
                 audience=FIREBASE_PROJECT_ID
