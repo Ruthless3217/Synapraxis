@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import os
 import logging
 import litellm
@@ -21,6 +21,7 @@ class ChatRequest(BaseModel):
     current_topic: str = Field(..., description="The topic currently being studied")
     message: str = Field(..., description="The user's question or statement")
     history: List[ChatMessage] = Field(default=[], description="Previous conversation history")
+    provider: Optional[str] = Field(default=None, description="Force a specific LLM provider (gemini, groq, mistral, cohere, claude)")
 
 class ChatResponse(BaseModel):
     reply: str = Field(..., description="Tutor's response (2-4 sentences)")
@@ -64,7 +65,7 @@ async def tutor_chat(request: ChatRequest):
     
     system_prompt = TUTOR_SYSTEM_PROMPT.format(current_topic=topic)
     
-    preferred = os.getenv("LLM_PROVIDER", "gemini").lower()
+    preferred = (request.provider or os.getenv("LLM_PROVIDER", "gemini")).lower()
     providers_to_try = []
     
     if _is_provider_configured(preferred):

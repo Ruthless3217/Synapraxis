@@ -8,9 +8,10 @@ class ILessonGenerationService(ABC):
         topic: str, 
         level: str, 
         age_group: str, 
-        language: str = "English"
+        language: str = "English",
+        provider: str = None
     ) -> LessonResponse:
         """
-        Generate a structured lesson for the given topic, level, and age group.
+        Generate a structured lesson for the given topic, level, and age group, optionally forcing a specific LLM provider.
         """
         pass

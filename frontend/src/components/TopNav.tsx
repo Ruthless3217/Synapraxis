@@ -8,7 +8,7 @@ interface TopNavProps {
 }
 
 export const TopNav: React.FC<TopNavProps> = ({ currentView, onNavigateHome }) => {
-  const { streak, xp, currentLesson } = useLessonStore();
+  const { streak, xp, currentLesson, provider, setProvider } = useLessonStore();
 
   return (
     <nav className="h-16 border-b border-border-custom bg-surface px-6 flex items-center justify-between sticky top-0 z-40 shadow-sm">
@@ -37,6 +37,22 @@ export const TopNav: React.FC<TopNavProps> = ({ currentView, onNavigateHome }) =
 
       {/* Right Stats Dashboard */}
       <div className="flex items-center gap-4">
+        {/* LLM Provider Selector */}
+        <div className="flex items-center gap-1.5 bg-canvas border border-border-custom px-3 py-1.5 rounded-xl text-xs font-semibold text-ink shadow-sm transition-all focus-within:ring-2 focus-within:ring-primary/20">
+          <span className="text-muted font-semibold">Tutor:</span>
+          <select
+            value={provider}
+            onChange={(e) => setProvider(e.target.value as any)}
+            className="bg-transparent border-none outline-none font-bold text-primary cursor-pointer text-xs p-0 focus:ring-0"
+          >
+            <option value="gemini" className="bg-surface text-ink">🤖 Gemini</option>
+            <option value="groq" className="bg-surface text-ink">⚡ Groq (Llama 3)</option>
+            <option value="mistral" className="bg-surface text-ink">🌀 Mistral</option>
+            <option value="cohere" className="bg-surface text-ink">🧠 Cohere</option>
+            <option value="claude" className="bg-surface text-ink">🔒 Claude</option>
+          </select>
+        </div>
+
         {/* XP Points */}
         <div className="flex items-center gap-1.5 bg-primary-light text-primary px-3.5 py-1.5 rounded-full text-sm font-semibold border border-primary/10 shadow-sm">
           <Sparkles size={16} className="fill-primary/25" />

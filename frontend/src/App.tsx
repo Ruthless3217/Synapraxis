@@ -16,6 +16,7 @@ export const App: React.FC = () => {
     error,
     ageGroup,
     userLevel,
+    provider,
     setTopic,
     setLesson,
     setLoading,
@@ -36,7 +37,8 @@ export const App: React.FC = () => {
         topic: topic,
         level: userLevel,
         age_group: ageGroup,
-        language: 'English'
+        language: 'English',
+        provider: provider
       }));
       if (!response.ok) {
         throw new Error('Failed to generate lesson. Please check backend connection.');

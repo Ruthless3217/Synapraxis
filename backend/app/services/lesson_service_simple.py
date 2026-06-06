@@ -113,7 +113,8 @@ class SimpleLLMLessonService(ILessonGenerationService):
         topic: str, 
         level: str, 
         age_group: str, 
-        language: str = "English"
+        language: str = "English",
+        provider: str = None
     ) -> LessonResponse:
         user_prompt = USER_PROMPT_TEMPLATE.format(
             topic=topic,
@@ -122,8 +123,8 @@ class SimpleLLMLessonService(ILessonGenerationService):
             language=language
         )
         
-        # Determine fallback sequence: start with preferred, then try the others in order
-        preferred = self.provider
+        # Determine fallback sequence: start with preferred (or override provider), then try the others in order
+        preferred = (provider or self.provider).lower()
         providers_to_try = []
         
         if self._is_provider_configured(preferred):
@@ -134,7 +135,7 @@ class SimpleLLMLessonService(ILessonGenerationService):
             if p != preferred and self._is_provider_configured(p):
                 providers_to_try.append(p)
                 
-        logger.info(f"Configured providers for generation fallback: {providers_to_try}")
+        logger.info(f"Configured providers for generation (preferred: {preferred}): {providers_to_try}")
         
         for provider in providers_to_try:
             try:

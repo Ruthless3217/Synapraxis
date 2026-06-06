@@ -16,7 +16,8 @@ export const RightPanel: React.FC = () => {
     setUserNotes,
     completedConcepts,
     score,
-    quizSubmitted
+    quizSubmitted,
+    provider
   } = useLessonStore();
 
   const [inputMessage, setInputMessage] = useState('');
@@ -52,7 +53,8 @@ export const RightPanel: React.FC = () => {
         body: JSON.stringify({
           current_topic: currentLesson.title,
           message: query,
-          history: chatHistory
+          history: chatHistory,
+          provider: provider
         })
       });
 

@@ -36,6 +36,10 @@ interface LessonState {
   ageGroup: 'Kids' | 'Teen' | 'Adult' | 'Expert';
   userLevel: 'Beginner' | 'Intermediate' | 'Advanced';
   
+  // LLM Provider selection
+  provider: 'gemini' | 'groq' | 'mistral' | 'cohere' | 'claude';
+  setProvider: (provider: 'gemini' | 'groq' | 'mistral' | 'cohere' | 'claude') => void;
+  
   // Setters & Actions
   setTopic: (topic: string) => void;
   setLesson: (lesson: LessonResponse | null) => void;
@@ -91,6 +95,7 @@ export const useLessonStore = create<LessonState>((set) => ({
   // Profile
   ageGroup: 'Adult',
   userLevel: 'Beginner',
+  provider: 'gemini',
   
   // Actions
   setTopic: (topic) => set({ currentTopic: topic }),
@@ -98,6 +103,7 @@ export const useLessonStore = create<LessonState>((set) => ({
   setLoading: (loading) => set({ isLoading: loading }),
   setError: (error) => set({ error }),
   setActiveTab: (tab) => set({ activeTab: tab }),
+  setProvider: (provider) => set({ provider }),
   
   toggleConcept: (conceptName) => set((state) => {
     const isCompleted = state.completedConcepts.includes(conceptName);

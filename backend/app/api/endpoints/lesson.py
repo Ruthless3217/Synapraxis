@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
+from typing import Optional
 import logging
 from app.schemas.lesson import LessonResponse
 from app.services.lesson_service_interface import ILessonGenerationService
@@ -26,15 +27,17 @@ async def generate_lesson(
     level: str = Query("Beginner", description="Difficulty: Beginner | Intermediate | Advanced"),
     age_group: str = Query("Adult", description="Age level: Kids | Teen | Adult | Expert"),
     language: str = Query("English", description="Language of the lesson"),
+    provider: Optional[str] = Query(None, description="Force a specific LLM provider (gemini, groq, mistral, cohere, claude)"),
     service: ILessonGenerationService = Depends(get_lesson_service)
 ):
-    logger.info(f"Received request to generate lesson for topic: '{topic}' [Level: {level}, Age Group: {age_group}]")
+    logger.info(f"Received request to generate lesson for topic: '{topic}' [Level: {level}, Age Group: {age_group}, Provider: {provider}]")
     try:
         lesson = await service.generate_lesson(
             topic=topic,
             level=level,
             age_group=age_group,
-            language=language
+            language=language,
+            provider=provider
         )
         return lesson
     except Exception as e:
