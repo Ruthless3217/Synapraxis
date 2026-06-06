@@ -8,7 +8,12 @@ from datetime import datetime, date, timedelta
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "synapraxis.db")
+if os.getenv("VERCEL") == "1" or os.getenv("VERCEL"):
+    DB_PATH = "/tmp/synapraxis.db"
+    logger.info(f"Vercel environment detected. Using writable SQLite database path: {DB_PATH}")
+else:
+    DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "synapraxis.db")
+    logger.info(f"Local environment detected. Using SQLite database path: {DB_PATH}")
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
