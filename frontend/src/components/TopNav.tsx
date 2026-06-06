@@ -3,31 +3,65 @@ import { useLessonStore } from '../store/useLessonStore';
 import { Flame, Sparkles, GraduationCap } from 'lucide-react';
 
 interface TopNavProps {
-  currentView: 'home' | 'lesson';
   onNavigateHome: () => void;
 }
 
-export const TopNav: React.FC<TopNavProps> = ({ currentView, onNavigateHome }) => {
-  const { streak, xp, currentLesson, provider, setProvider } = useLessonStore();
+export const TopNav: React.FC<TopNavProps> = ({ onNavigateHome }) => {
+  const { streak, xp, currentLesson, provider, setProvider, viewMode, setViewMode } = useLessonStore();
+
+  const handleLogoClick = () => {
+    setViewMode('home');
+    onNavigateHome();
+  };
 
   return (
-    <nav className="h-16 border-b border-border-custom bg-surface px-6 flex items-center justify-between sticky top-0 z-40 shadow-sm">
-      {/* Brand Logo */}
-      <div 
-        onClick={onNavigateHome}
-        className="flex items-center gap-2 cursor-pointer group"
-      >
-        <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-white shadow-md shadow-primary/20 group-hover:scale-105 transition-transform">
-          <GraduationCap size={22} className="stroke-[2.5]" />
+    <nav className="h-16 border-b border-border-custom bg-surface px-6 flex items-center justify-between sticky top-0 z-40 shadow-sm select-none">
+      {/* Logo & Navigation */}
+      <div className="flex items-center gap-6">
+        <div 
+          onClick={handleLogoClick}
+          className="flex items-center gap-2 cursor-pointer group"
+        >
+          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-white shadow-md shadow-primary/20 group-hover:scale-105 transition-transform">
+            <GraduationCap size={22} className="stroke-[2.5]" />
+          </div>
+          <span className="font-serif text-xl font-bold tracking-tight text-ink hover:text-primary transition-colors">
+            Synapraxis<span className="text-primary font-sans font-extrabold ml-0.5">.ai</span>
+          </span>
         </div>
-        <span className="font-serif text-xl font-bold tracking-tight text-ink hover:text-primary transition-colors">
-          Synapraxis<span className="text-primary font-sans font-extrabold ml-0.5">.ai</span>
-        </span>
+
+        {/* Global Navigation Links */}
+        <div className="flex items-center gap-1 bg-canvas p-1 rounded-xl border border-border-custom/50">
+          <button
+            onClick={() => setViewMode('home')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              viewMode === 'home' 
+                ? 'bg-surface text-primary shadow-sm border border-border-custom/55' 
+                : 'text-muted hover:text-ink font-semibold'
+            }`}
+          >
+            Explore
+          </button>
+          <button
+            onClick={() => setViewMode('dashboard')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              viewMode === 'dashboard' 
+                ? 'bg-surface text-primary shadow-sm border border-border-custom/55' 
+                : 'text-muted hover:text-ink font-semibold'
+            }`}
+          >
+            Dashboard
+          </button>
+        </div>
       </div>
 
       {/* Middle Tab Indicator */}
-      {currentView === 'lesson' && currentLesson && (
-        <div className="hidden md:flex items-center gap-2 bg-canvas px-4 py-1.5 rounded-full border border-border-custom text-sm font-medium text-ink2">
+      {currentLesson && (
+        <div 
+          onClick={() => setViewMode('lesson')}
+          className="hidden md:flex items-center gap-2 bg-canvas px-4 py-1.5 rounded-full border border-border-custom text-sm font-medium text-ink2 cursor-pointer hover:border-primary/50 hover:shadow-sm transition-all"
+          title="Click to resume active lesson"
+        >
           <span className="text-primary">{currentLesson.emoji}</span>
           <span className="truncate max-w-[200px]">{currentLesson.title}</span>
           <span className="w-1.5 h-1.5 rounded-full bg-teal-accent"></span>

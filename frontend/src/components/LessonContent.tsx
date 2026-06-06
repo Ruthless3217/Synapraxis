@@ -55,7 +55,7 @@ export const LessonContent: React.FC<LessonContentProps> = ({ onLearnNext }) => 
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-serif text-2xl font-semibold text-ink">Core Concepts</h2>
-          <span className="text-xs text-muted font-medium">Click concept cards to check off mastery</span>
+          <span className="text-xs text-muted font-medium">Click card to toggle completion, or Deep Dive to chain learning</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {currentLesson.concepts.map((concept, idx) => {
@@ -67,7 +67,7 @@ export const LessonContent: React.FC<LessonContentProps> = ({ onLearnNext }) => 
               <div
                 key={idx}
                 onClick={() => toggleConcept(concept.name)}
-                className={`p-5 rounded-2xl border cursor-pointer hover:border-primary/50 transition-all duration-300 relative flex flex-col justify-between h-44 ${
+                className={`p-5 rounded-2xl border cursor-pointer hover:border-primary/50 transition-all duration-300 relative flex flex-col justify-between min-h-[12.5rem] ${
                   isActive ? activeSectionBorder : isCompleted ? 'border-teal-accent/30 bg-teal-accent/5' : inactiveSectionBorder
                 }`}
               >
@@ -81,17 +81,29 @@ export const LessonContent: React.FC<LessonContentProps> = ({ onLearnNext }) => 
                     )}
                   </div>
                   <h3 className="font-semibold text-base text-ink mb-1.5">{concept.name}</h3>
-                  <p className="text-xs text-muted leading-relaxed font-sans">
+                  <p className="text-xs text-muted leading-relaxed font-sans line-clamp-3">
                     {concept.desc}
                   </p>
                 </div>
                 
-                {/* Visual Audio Wave inside Card if Active */}
-                {isActive && (
-                  <span className="absolute bottom-4 right-4 text-[10px] font-bold text-primary flex items-center gap-1">
-                    <Play size={8} className="fill-primary" /> Audio Playing
-                  </span>
-                )}
+                <div className="flex justify-between items-center mt-3 pt-2 border-t border-border-custom/30">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onLearnNext(concept.name);
+                    }}
+                    className="px-2.5 py-1.5 bg-primary-light text-primary hover:bg-primary hover:text-white text-[10px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Deep Dive</span>
+                    <ArrowRight size={10} />
+                  </button>
+
+                  {isActive && (
+                    <span className="text-[10px] font-bold text-primary flex items-center gap-1">
+                      <Play size={8} className="fill-primary" /> Audio Playing
+                    </span>
+                  )}
+                </div>
               </div>
             );
           })}

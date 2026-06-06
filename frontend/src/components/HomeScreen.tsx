@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Search, Sparkles, BookOpen, Brain, Zap, Headphones } from 'lucide-react';
+import { Search, Sparkles, BookOpen, Brain, Zap, Headphones, Map } from 'lucide-react';
+import { useLessonStore } from '../store/useLessonStore';
 
 interface HomeScreenProps {
   onSearch: (topic: string) => void;
@@ -8,6 +9,8 @@ interface HomeScreenProps {
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ onSearch, isLoading }) => {
   const [topic, setTopic] = useState('');
+  const [searchType, setSearchType] = useState<'lesson' | 'path'>('lesson');
+  const { createLearningPath } = useLessonStore();
 
   const suggestions = [
     'How Neural Networks work',
@@ -20,14 +23,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSearch, isLoading }) =
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (topic.trim() && !isLoading) {
-      onSearch(topic.trim());
+      if (searchType === 'path') {
+        createLearningPath(topic.trim());
+      } else {
+        onSearch(topic.trim());
+      }
     }
   };
 
   return (
     <div className="flex-1 flex flex-col justify-center items-center px-8 py-16 bg-gradient-to-b from-canvas via-white to-canvas text-center">
       {/* Title Header */}
-      <div className="max-w-3xl mb-10 animate-fade-in">
+      <div className="max-w-3xl mb-6 animate-fade-in">
         <div className="inline-flex items-center gap-1.5 bg-primary-light text-primary px-3 py-1 rounded-full text-xs font-semibold border border-primary/10 shadow-sm mb-4">
           <Sparkles size={14} className="fill-primary/10 animate-pulse" />
           <span>Next-Generation Personalized Learning OS</span>
@@ -38,6 +45,34 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSearch, isLoading }) =
         <p className="text-lg text-muted max-w-xl mx-auto font-sans leading-relaxed">
           Type any topic in the world. Synapraxis will build a custom course, narrate the concepts, and teach you interactively in seconds.
         </p>
+      </div>
+
+      {/* Mode Selector Toggle */}
+      <div className="flex items-center gap-1 bg-canvas p-1 rounded-xl border border-border-custom/50 mb-6 select-none shadow-sm">
+        <button
+          type="button"
+          onClick={() => setSearchType('lesson')}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            searchType === 'lesson' 
+              ? 'bg-surface text-primary shadow-sm border border-border-custom/55' 
+              : 'text-muted hover:text-ink font-semibold'
+          }`}
+        >
+          <BookOpen size={13} />
+          <span>Single Lesson</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setSearchType('path')}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            searchType === 'path' 
+              ? 'bg-surface text-primary shadow-sm border border-border-custom/55' 
+              : 'text-muted hover:text-ink font-semibold'
+          }`}
+        >
+          <Map size={13} />
+          <span>Custom Learning Path</span>
+        </button>
       </div>
 
       {/* Hero Search Bar */}
@@ -52,7 +87,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSearch, isLoading }) =
           type="text"
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
-          placeholder="Enter a subject (e.g. quantum physics, French revolution, stock market...)"
+          placeholder={searchType === 'lesson' ? "Enter a subject (e.g. quantum physics, stock market...)" : "Enter a broader path query (e.g. Full-Stack Web Development, Data Science...)"}
           className="flex-1 px-3 py-4 text-ink bg-transparent outline-none font-medium placeholder-muted text-base"
           disabled={isLoading}
         />
@@ -68,7 +103,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSearch, isLoading }) =
             </>
           ) : (
             <>
-              <span>Generate Course</span>
+              <span>{searchType === 'lesson' ? 'Generate Course' : 'Create Path'}</span>
             </>
           )}
         </button>
@@ -83,7 +118,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSearch, isLoading }) =
             type="button"
             onClick={() => {
               setTopic(sug);
-              onSearch(sug);
+              if (searchType === 'path') {
+                createLearningPath(sug);
+              } else {
+                onSearch(sug);
+              }
             }}
             disabled={isLoading}
             className="bg-surface hover:bg-primary-light text-ink2 hover:text-primary border border-border-custom rounded-full px-3.5 py-1.5 text-xs font-medium transition-all shadow-sm cursor-pointer disabled:opacity-50"

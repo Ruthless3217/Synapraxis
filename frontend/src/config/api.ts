@@ -14,4 +14,16 @@ export const api = {
   chat: {
     tutor: `${API_BASE_URL}/api/chat/tutor`,
   },
+  user: {
+    profile: `${API_BASE_URL}/api/user/profile`,
+    conceptComplete: `${API_BASE_URL}/api/user/concept-complete`,
+    quizSubmit: `${API_BASE_URL}/api/user/quiz-submit`,
+  },
+  path: {
+    generate: `${API_BASE_URL}/api/path/generate`,
+    all: `${API_BASE_URL}/api/path/all`,
+    detail: (id: number) => `${API_BASE_URL}/api/path/${id}`,
+    updateStep: (id: number) => `${API_BASE_URL}/api/path/${id}/step`,
+    activate: (id: number) => `${API_BASE_URL}/api/path/${id}/activate`,
+  }
 };

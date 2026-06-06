@@ -17,7 +17,8 @@ export const RightPanel: React.FC = () => {
     completedConcepts,
     score,
     quizSubmitted,
-    provider
+    provider,
+    activePath
   } = useLessonStore();
 
   const [inputMessage, setInputMessage] = useState('');
@@ -41,7 +42,6 @@ export const RightPanel: React.FC = () => {
     setChatLoading(true);
 
     try {
-      // Map Zustand history to Pydantic ChatMessage format
       const chatHistory = tutorChatHistory.map(msg => ({
         role: msg.role,
         content: msg.content
@@ -71,6 +71,17 @@ export const RightPanel: React.FC = () => {
       setChatLoading(false);
     }
   };
+
+  // Resolve steps for path tab (use active path if set, otherwise fallback to lesson steps)
+  const steps = activePath
+    ? activePath.steps
+    : [
+        { order: 1, topic: 'Foundations & Hook principles', desc: 'Acquire introductory vocabulary and core baseline logic.', status: 'completed' as const },
+        { order: 2, topic: currentLesson.title, desc: 'Your current active deep-dive module.', status: 'active' as const },
+        { order: 3, topic: currentLesson.next_topics[0] || 'Advanced concepts', desc: 'Expand on dynamic applications and edge mechanics.', status: 'pending' as const },
+        { order: 4, topic: currentLesson.next_topics[1] || 'Real world systems', desc: 'Investigate case studies and systemic performance criteria.', status: 'pending' as const },
+        { order: 5, topic: 'Capston Synthesis Project', desc: 'Integrate the 4 concept blocks into a practical demonstration.', status: 'pending' as const }
+      ];
 
   return (
     <div className="w-80 border-l border-border-custom bg-surface flex flex-col h-[calc(100vh-4rem)] sticky top-16 right-0 z-30 shrink-0 select-none">
@@ -105,7 +116,7 @@ export const RightPanel: React.FC = () => {
           onClick={() => setActiveTab('stats')}
           className={`flex-1 flex flex-col items-center py-2.5 rounded-xl transition-all ${
             activeTab === 'stats' 
-              ? 'bg-surface text-primary font-bold shadow-sm border border-border-custom/50' 
+              ? 'bg-surface text-primary font-bold shadow-sm border border-border-custom/55' 
               : 'text-muted hover:text-ink font-medium'
           }`}
         >
@@ -117,7 +128,7 @@ export const RightPanel: React.FC = () => {
           onClick={() => setActiveTab('path')}
           className={`flex-1 flex flex-col items-center py-2.5 rounded-xl transition-all ${
             activeTab === 'path' 
-              ? 'bg-surface text-primary font-bold shadow-sm border border-border-custom/50' 
+              ? 'bg-surface text-primary font-bold shadow-sm border border-border-custom/55' 
               : 'text-muted hover:text-ink font-medium'
           }`}
         >
@@ -132,7 +143,7 @@ export const RightPanel: React.FC = () => {
         {/* TAB 1: TUTOR CHAT */}
         {activeTab === 'tutor' && (
           <div className="flex-1 flex flex-col justify-between min-h-0 bg-canvas/20">
-            {/* Chat Messages Frame */}
+            {/* Chat Messages Frame - Dynamically fills space so input is always visible */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {tutorChatHistory.map((msg, idx) => (
                 <div 
@@ -170,8 +181,8 @@ export const RightPanel: React.FC = () => {
               <div ref={chatEndRef} />
             </div>
 
-            {/* Chat Send Input Box */}
-            <form onSubmit={handleSendMessage} className="p-3 border-t border-border-custom bg-surface flex items-center gap-2">
+            {/* Chat Send Input Box - Pinned at the bottom */}
+            <form onSubmit={handleSendMessage} className="p-3 border-t border-border-custom bg-surface flex items-center gap-2 shrink-0">
               <input
                 type="text"
                 value={inputMessage}
@@ -238,13 +249,13 @@ export const RightPanel: React.FC = () => {
 
         {/* TAB 3: STATS SECTION */}
         {activeTab === 'stats' && (
-          <div className="p-4 space-y-6 flex-1 bg-canvas/10">
+          <div className="p-4 space-y-6 flex-1 bg-canvas/10 overflow-y-auto">
             {/* XP and Concepts Completion Card */}
             <div className="bg-surface border border-border-custom p-4 rounded-xl shadow-sm flex justify-between items-center">
               <div>
                 <span className="text-[10px] font-bold text-muted uppercase tracking-wider block">Concepts Completed</span>
                 <span className="font-serif text-2xl font-bold text-ink">
-                  {completedConcepts.length} / 4
+                  {completedConcepts.length} / {currentLesson.concepts.length}
                 </span>
               </div>
               <div className="w-10 h-10 rounded-full bg-teal-accent/15 flex items-center justify-center text-teal-accent">
@@ -257,7 +268,7 @@ export const RightPanel: React.FC = () => {
               <div>
                 <span className="text-[10px] font-bold text-muted uppercase tracking-wider block">Quiz Accuracy</span>
                 <span className="font-serif text-2xl font-bold text-ink">
-                  {quizSubmitted ? `${((score / 3) * 100).toFixed(0)}%` : 'No Attempts'}
+                  {quizSubmitted ? `${((score / currentLesson.quiz.length) * 100).toFixed(0)}%` : 'No Attempts'}
                 </span>
               </div>
               <div className="w-10 h-10 rounded-full bg-primary-light flex items-center justify-center text-primary font-bold text-sm">
@@ -296,22 +307,20 @@ export const RightPanel: React.FC = () => {
         {/* TAB 4: PATH ROADMAP */}
         {activeTab === 'path' && (
           <div className="p-4 space-y-5 flex-1 bg-canvas/10 overflow-y-auto">
-            <h4 className="text-xs font-bold text-ink mb-1">Generated Syllabus Flow</h4>
-            <p className="text-[10px] text-muted mb-4">5-step roadmap sequenced automatically for this topic.</p>
+            <h4 className="text-xs font-bold text-ink mb-1">
+              {activePath ? 'Custom Learning Roadmap' : 'Generated Syllabus Flow'}
+            </h4>
+            <p className="text-[10px] text-muted mb-4">
+              5-step roadmap sequenced automatically for this topic.
+            </p>
             
             <div className="relative border-l border-primary/20 ml-2.5 pl-5 space-y-6">
-              {[
-                { order: 1, topic: 'Foundations & Hook principles', desc: 'Acquire introductory vocabulary and core baseline logic.', status: 'completed' },
-                { order: 2, topic: currentLesson.title, desc: 'Your current active deep-dive module.', status: 'active' },
-                { order: 3, topic: currentLesson.next_topics[0] || 'Advanced concepts', desc: 'Expand on dynamic applications and edge mechanics.', status: 'pending' },
-                { order: 4, topic: currentLesson.next_topics[1] || 'Real world systems', desc: 'Investigate case studies and systemic performance criteria.', status: 'pending' },
-                { order: 5, topic: 'Capston Synthesis Project', desc: 'Integrate the 4 concept blocks into a practical demonstration.', status: 'pending' }
-              ].map((step, idx) => {
+              {steps.map((step, idx) => {
                 let dotStyle = "border-primary bg-surface";
                 let textStyle = "text-ink2";
                 
                 if (step.status === 'completed') {
-                  dotStyle = "border-teal-accent bg-teal-accent text-white";
+                  dotStyle = "border-teal-500 bg-teal-500 text-white";
                   textStyle = "text-muted line-through decoration-muted/30";
                 } else if (step.status === 'active') {
                   dotStyle = "border-primary bg-primary ring-4 ring-primary/10";

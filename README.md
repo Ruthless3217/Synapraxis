@@ -39,7 +39,10 @@ Synapraxis is a **production-grade, adaptive AI learning platform** that generat
 | 📝 **Workspace Notes** | Take personal notes alongside auto-generated summaries |
 | 📊 **Learning Stats** | Track completed concepts, quiz accuracy, and subject coverage |
 | 🗺️ **Learning Path** | Auto-generated 5-step syllabus roadmap per topic |
-| ⚡ **Topic Chaining** | One-click "Learn Next" navigation to explore related topics |
+| ⚡ **Topic Chaining** | One-click "Deep Dive" navigation on core concepts to chain related sub-lessons |
+| 🗃️ **Persistent Database** | SQLite database tracking user profile details, XP, streaks, daily goals, and course history |
+| ⚡ **Caching Service** | Redis caching (with local in-memory fallback) for instant lesson retrieval |
+| 🎛️ **User Dashboard** | Pinned progress bars, active roadmap view, and a vault to resume past lessons |
 
 ---
 
@@ -216,10 +219,10 @@ Synapraxis/
 
 - [x] **Phase 1** — Core lesson generation engine + search UI
 - [x] **Phase 2** — Interactive quiz, AI tutor chat, audio narration
-- [ ] **Phase 3** — User authentication, persistent history, streaks
-- [ ] **Phase 4** — ElevenLabs premium voices, dark mode, PDF export
-- [ ] **Phase 5** — XP system, badges, leaderboards, Stripe paywall
-- [ ] **Phase 6** — Multi-agent backend (LangGraph), image/doc upload, Socratic mode
+- [x] **Phase 3** — Persistent SQLite history, streak validation, XP system, and user dashboard
+- [x] **Phase 4** — Caching layer with Redis + local in-memory fallback
+- [ ] **Phase 5** — User authentication, ElevenLabs voices, dark mode, PDF export
+- [ ] **Phase 6** — Multi-agent backend (LangGraph / Neo4j), image/doc upload, Socratic mode
 
 ---
 
