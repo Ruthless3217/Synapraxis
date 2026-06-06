@@ -24,15 +24,28 @@ app = FastAPI(
     version="1.0.0"
 )
 
-@app.middleware("http")
-async def rewrite_firebase_prefix(request, call_next):
-    path = request.url.path
-    if path.startswith("/_/backend"):
-        request.scope["path"] = path[len("/_/backend"):]
-        if "raw_path" in request.scope:
-            request.scope["raw_path"] = request.scope["raw_path"][len(b"/_/backend"):]
-    response = await call_next(request)
-    return response
+class FirebasePrefixMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            path = scope.get("path", "")
+            if path.startswith("/_/backend"):
+                new_path = path[len("/_/backend"):]
+                if not new_path.startswith("/"):
+                    new_path = "/" + new_path
+                scope["path"] = new_path
+                
+                if "raw_path" in scope:
+                    raw_path = scope["raw_path"]
+                    new_raw = raw_path[len(b"/_/backend"):]
+                    if not new_raw.startswith(b"/"):
+                        new_raw = b"/" + new_raw
+                    scope["raw_path"] = new_raw
+        await self.app(scope, receive, send)
+
+app.add_middleware(FirebasePrefixMiddleware)
 
 @app.on_event("startup")
 def on_startup():
