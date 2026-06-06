@@ -3,11 +3,13 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Any
 import os
 import logging
-from google.generativeai import GenerativeModel
-import google.generativeai as genai
-from anthropic import Anthropic
+import litellm
+from litellm import acompletion
 
 logger = logging.getLogger(__name__)
+
+# Configure LiteLLM settings
+litellm.drop_params = True
 
 router = APIRouter()
 
@@ -36,6 +38,25 @@ Your response rules:
 8. If the student is frustrated, acknowledge it first before answering.
 """
 
+def _get_provider_details(provider: str) -> tuple[str, str | None]:
+    provider = provider.lower()
+    if provider == "gemini":
+        return os.getenv("GEMINI_MODEL", "gemini/gemini-2.0-flash"), os.getenv("GEMINI_API_KEY")
+    elif provider == "groq":
+        return os.getenv("GROQ_MODEL", "groq/llama-3.3-70b-versatile"), os.getenv("GROQ_API_KEY")
+    elif provider == "mistral":
+        return os.getenv("MISTRAL_MODEL", "mistral/mistral-large-latest"), os.getenv("MISTRAL_API_KEY")
+    elif provider == "cohere":
+        return os.getenv("COHERE_MODEL", "cohere/command-r-plus"), os.getenv("COHERE_API_KEY")
+    elif provider == "claude":
+        return os.getenv("CLAUDE_MODEL", "anthropic/claude-3-5-sonnet-20241022"), os.getenv("ANTHROPIC_API_KEY")
+    else:
+        return os.getenv("GEMINI_MODEL", "gemini/gemini-2.0-flash"), os.getenv("GEMINI_API_KEY")
+
+def _is_provider_configured(provider: str) -> bool:
+    _, api_key = _get_provider_details(provider)
+    return bool(api_key and api_key.strip())
+
 @router.post("/tutor", response_model=ChatResponse)
 async def tutor_chat(request: ChatRequest):
     topic = request.current_topic
@@ -43,66 +64,54 @@ async def tutor_chat(request: ChatRequest):
     
     system_prompt = TUTOR_SYSTEM_PROMPT.format(current_topic=topic)
     
-    provider = os.getenv("LLM_PROVIDER", "gemini").lower()
+    preferred = os.getenv("LLM_PROVIDER", "gemini").lower()
+    providers_to_try = []
     
-    try:
-        if provider == "gemini":
-            reply = await _chat_with_gemini(system_prompt, user_msg, request.history)
-        else:
-            # Fallback/Default to Claude if configured and available
-            anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-            if anthropic_key:
-                reply = await _chat_with_claude(system_prompt, user_msg, request.history, anthropic_key)
-            else:
-                reply = await _chat_with_gemini(system_prompt, user_msg, request.history)
-                
-        return ChatResponse(reply=reply)
+    if _is_provider_configured(preferred):
+        providers_to_try.append(preferred)
         
-    except Exception as e:
-        logger.error(f"Error in tutor_chat: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Tutor failed to respond: {str(e)}")
-
-async def _chat_with_gemini(system_prompt: str, user_msg: str, history: List[ChatMessage]) -> str:
-    model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    all_possible = ["gemini", "groq", "mistral", "cohere", "claude"]
+    for p in all_possible:
+        if p != preferred and _is_provider_configured(p):
+            providers_to_try.append(p)
+            
+    logger.info(f"Configured providers for chat fallback: {providers_to_try}")
     
-    # Simple direct API model call with system instruction
-    model = GenerativeModel(
-        model_name=model_name,
-        system_instruction=system_prompt,
-        generation_config={"temperature": 0.5, "max_output_tokens": 300}
+    for provider in providers_to_try:
+        try:
+            reply = await _chat_with_litellm(system_prompt, user_msg, request.history, provider)
+            return ChatResponse(reply=reply)
+        except Exception as e:
+            logger.error(f"Chat failed with provider '{provider}': {e}", exc_info=True)
+            continue
+            
+    raise HTTPException(
+        status_code=500, 
+        detail="All configured LLM providers failed to respond to the tutor request."
     )
-    
-    # We can format the history and query
-    prompt_parts = []
-    for h in history:
-        prefix = "Student: " if h.role == "user" else "Synapraxis: "
-        prompt_parts.append(f"{prefix}{h.content}")
-    
-    prompt_parts.append(f"Student: {user_msg}")
-    full_prompt = "\n".join(prompt_parts)
-    
-    response = model.generate_content(full_prompt)
-    return response.text.strip()
 
-async def _chat_with_claude(system_prompt: str, user_msg: str, history: List[ChatMessage], api_key: str) -> str:
-    client = Anthropic(api_key=api_key)
-    model_name = os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20241022")
+async def _chat_with_litellm(system_prompt: str, user_msg: str, history: List[ChatMessage], provider: str) -> str:
+    model_name, api_key = _get_provider_details(provider)
+    if not api_key:
+        raise ValueError(f"API key for provider '{provider}' is not configured.")
+        
+    logger.info(f"Tutor chat using LiteLLM (provider: {provider}, model: {model_name})")
     
-    # Format messages for Anthropic API
-    messages = []
+    # Format messages for standard OpenAI format (accepted by LiteLLM)
+    messages = [{"role": "system", "content": system_prompt}]
     for h in history:
-        # Anthropic roles must be "user" or "assistant"
-        role = "user" if h.role == "user" else "assistant"
+        # Map roles to "user" or "assistant"
+        role = "assistant" if h.role == "assistant" else "user"
         messages.append({"role": role, "content": h.content})
         
     messages.append({"role": "user", "content": user_msg})
     
-    response = client.messages.create(
+    response = await acompletion(
         model=model_name,
-        max_tokens=300,
-        system=system_prompt,
         messages=messages,
-        temperature=0.5
+        temperature=0.5,
+        max_tokens=300,
+        api_key=api_key
     )
     
-    return response.content[0].text.strip()
+    return response.choices[0].message.content.strip()

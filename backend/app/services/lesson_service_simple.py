@@ -2,14 +2,16 @@ import os
 import json
 import logging
 from typing import Dict, Any
-from google.generativeai import GenerativeModel
-import google.generativeai as genai
-from anthropic import Anthropic
+import litellm
+from litellm import acompletion
 
 from app.schemas.lesson import LessonResponse, Concept, QuizQuestion
 from app.services.lesson_service_interface import ILessonGenerationService
 
 logger = logging.getLogger(__name__)
+
+# Configure LiteLLM settings
+litellm.drop_params = True
 
 SYSTEM_PROMPT = """You are Synapraxis, the world's most knowledgeable and engaging AI tutor. Your teaching style 
 combines the clarity of Richard Feynman, the warmth of a great mentor, and the precision 
@@ -18,7 +20,7 @@ art, music, philosophy, programming, languages, finance, fitness, cooking, or an
 a human might want to learn.
 
 RESPONSE FORMAT:
-You MUST return ONLY valid JSON matching the requested schema. No markdown fences. No preamble. No explanation outside the JSON object.
+You MUST return ONLY valid JSON matching the requested schema. No markdown fences. No backticks. No preamble. No explanation outside the JSON object.
 
 TEACHING PHILOSOPHY:
 - Every lesson must open with a "hook" — something surprising, counterintuitive, or 
@@ -51,25 +53,61 @@ Learner profile:
 - Level: {level}           // Beginner | Intermediate | Advanced
 - Language: {language}     // default: English
 
-Return JSON matching the schema parameters.
+Return ONLY valid JSON matching EXACTLY this schema (no extra fields, no missing fields):
+
+{{
+  "title": "string — clean lesson title (not a question)",
+  "emoji": "string — single most relevant emoji",
+  "subject_tag": "string — one of: Science | Technology | History | Mathematics | Art | Music | Language | Philosophy | Health | Finance | Cooking | Sports | Other",
+  "level": "string — Beginner | Intermediate | Advanced",
+  "duration": "string — e.g. '8 min read'",
+  "hook": "string — 1 sentence surprising fact",
+  "introduction": "string — 2-3 sentences referencing the hook",
+  "concepts": [
+    {{ "icon": "string — single emoji", "name": "string — 2-4 words", "desc": "string — exactly 2 sentences" }}
+  ],
+  "deep_dive": "string — 3-4 sentences with unexpected insight",
+  "example_title": "string — short title",
+  "example": "string — 2-3 sentences naming a real product/person/event",
+  "has_code": false,
+  "code_snippet": "",
+  "code_lang": "",
+  "analogy": "string — 1 sentence ELI5 analogy",
+  "quiz": [
+    {{ "question": "string", "options": ["string","string","string","string"], "correct": 0, "explanation": "string" }}
+  ],
+  "key_takeaways": ["string", "string", "string"],
+  "next_topics": ["string", "string", "string"],
+  "further_reading": "string — one specific resource + 1 sentence why"
+}}
+
+The concepts array must have EXACTLY 4 items. The quiz array must have EXACTLY 3 items. key_takeaways and next_topics must each have EXACTLY 3 items.
+Set has_code to true ONLY if the topic is programming/data science/algorithms/web tech, and provide code_snippet and code_lang accordingly. Otherwise set has_code to false and leave code_snippet and code_lang as empty strings.
 """
 
 class SimpleLLMLessonService(ILessonGenerationService):
     def __init__(self):
         self.provider = os.getenv("LLM_PROVIDER", "gemini").lower()
         
-        # Initialize Anthropic if key exists
-        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-        if anthropic_key:
-            self.anthropic_client = Anthropic(api_key=anthropic_key)
+    def _get_provider_details(self, provider: str) -> tuple[str, str | None]:
+        provider = provider.lower()
+        if provider == "gemini":
+            return os.getenv("GEMINI_MODEL", "gemini/gemini-2.0-flash"), os.getenv("GEMINI_API_KEY")
+        elif provider == "groq":
+            return os.getenv("GROQ_MODEL", "groq/llama-3.3-70b-versatile"), os.getenv("GROQ_API_KEY")
+        elif provider == "mistral":
+            return os.getenv("MISTRAL_MODEL", "mistral/mistral-large-latest"), os.getenv("MISTRAL_API_KEY")
+        elif provider == "cohere":
+            return os.getenv("COHERE_MODEL", "cohere/command-r-plus"), os.getenv("COHERE_API_KEY")
+        elif provider == "claude":
+            return os.getenv("CLAUDE_MODEL", "anthropic/claude-3-5-sonnet-20241022"), os.getenv("ANTHROPIC_API_KEY")
         else:
-            self.anthropic_client = None
-            
-        # Initialize Gemini if key exists
-        gemini_key = os.getenv("GEMINI_API_KEY")
-        if gemini_key:
-            genai.configure(api_key=gemini_key)
-            
+            return os.getenv("GEMINI_MODEL", "gemini/gemini-2.0-flash"), os.getenv("GEMINI_API_KEY")
+
+    def _is_provider_configured(self, provider: str) -> bool:
+        _, api_key = self._get_provider_details(provider)
+        return bool(api_key and api_key.strip())
+
     async def generate_lesson(
         self, 
         topic: str, 
@@ -84,67 +122,67 @@ class SimpleLLMLessonService(ILessonGenerationService):
             language=language
         )
         
-        try:
-            if self.provider == "gemini":
-                return await self._generate_with_gemini(user_prompt)
-            elif self.provider == "claude" and self.anthropic_client:
-                return await self._generate_with_claude(user_prompt)
-            else:
-                # Fallback to Gemini if Claude is chosen but key is missing, and vice versa
-                if self.anthropic_client:
-                    return await self._generate_with_claude(user_prompt)
-                else:
-                    return await self._generate_with_gemini(user_prompt)
-        except Exception as e:
-            logger.error(f"Failed to generate lesson from LLM: {e}", exc_info=True)
-            return self._get_fallback_lesson(topic, level)
+        # Determine fallback sequence: start with preferred, then try the others in order
+        preferred = self.provider
+        providers_to_try = []
+        
+        if self._is_provider_configured(preferred):
+            providers_to_try.append(preferred)
+            
+        all_possible = ["gemini", "groq", "mistral", "cohere", "claude"]
+        for p in all_possible:
+            if p != preferred and self._is_provider_configured(p):
+                providers_to_try.append(p)
+                
+        logger.info(f"Configured providers for generation fallback: {providers_to_try}")
+        
+        for provider in providers_to_try:
+            try:
+                return await self._generate_with_litellm(provider, user_prompt)
+            except Exception as e:
+                logger.error(f"Failed to generate lesson with provider '{provider}': {e}", exc_info=True)
+                continue
+                
+        logger.warning("All configured LLM providers failed. Returning static fallback lesson.")
+        return self._get_fallback_lesson(topic, level)
 
-    async def _generate_with_gemini(self, prompt: str) -> LessonResponse:
-        # Use gemini-1.5-pro or gemini-2.5-flash as available
-        model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    async def _generate_with_litellm(self, provider: str, prompt: str) -> LessonResponse:
+        model_name, api_key = self._get_provider_details(provider)
+        if not api_key:
+            raise ValueError(f"API key for provider '{provider}' is not configured.")
+            
+        logger.info(f"Generating lesson using LiteLLM (provider: {provider}, model: {model_name})")
         
-        # Native structured JSON output using Pydantic schema!
-        model = GenerativeModel(
-            model_name=model_name,
-            system_instruction=SYSTEM_PROMPT,
-            generation_config={
-                "response_mime_type": "application/json",
-                "response_schema": LessonResponse,
-                "temperature": 0.2,
-            }
-        )
-        
-        response = model.generate_content(prompt)
-        response_text = response.text.strip()
-        
-        # Parse output and validate with Pydantic
-        lesson_data = json.loads(response_text)
-        return LessonResponse(**lesson_data)
-
-    async def _generate_with_claude(self, prompt: str) -> LessonResponse:
-        model_name = os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20241022")
-        
-        response = self.anthropic_client.messages.create(
-            model=model_name,
-            max_tokens=4000,
-            system=SYSTEM_PROMPT,
-            messages=[
+        kwargs = {
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.2
-        )
+            "temperature": 0.2,
+            "api_key": api_key
+        }
         
-        response_text = response.content[0].text.strip()
+        # Enable structured/JSON output for providers supporting it
+        # Anthropic claude doesn't support json_object natively without tools, so we omit for it
+        if provider != "claude":
+            kwargs["response_format"] = {"type": "json_object"}
+            
+        response = await acompletion(**kwargs)
+        response_text = response.choices[0].message.content.strip()
         
-        # Strip potential markdown code fences if LLM included them
+        # Clean potential markdown code fences
         if response_text.startswith("```json"):
             response_text = response_text[7:]
+        if response_text.startswith("```"):
+            response_text = response_text[3:]
         if response_text.endswith("```"):
             response_text = response_text[:-3]
         response_text = response_text.strip()
         
         lesson_data = json.loads(response_text)
         return LessonResponse(**lesson_data)
+
 
     def _get_fallback_lesson(self, topic: str, level: str) -> LessonResponse:
         logger.warning(f"Returning fallback lesson for topic: {topic}")
