@@ -100,7 +100,8 @@ async def _chat_with_litellm(system_prompt: str, user_msg: str, history: List[Ch
     
     # Format messages for standard OpenAI format (accepted by LiteLLM)
     messages = [{"role": "system", "content": system_prompt}]
-    for h in history:
+    # Limit context history to the last 10 messages to avoid token bloat and latency spikes
+    for h in history[-10:]:
         # Map roles to "user" or "assistant"
         role = "assistant" if h.role == "assistant" else "user"
         messages.append({"role": role, "content": h.content})

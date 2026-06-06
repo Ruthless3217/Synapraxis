@@ -49,6 +49,12 @@ class CacheService:
             except Exception as e:
                 logger.error(f"Redis set error: {e}")
                 
+        # Simple size limit guard for in-memory cache fallback to prevent memory leaks
+        if len(self.in_memory_cache) >= 100:
+            # Evict first key (arbitrary, acts as simple FIFO)
+            first_key = next(iter(self.in_memory_cache))
+            self.in_memory_cache.pop(first_key, None)
+            
         self.in_memory_cache[key] = value
 
 cache_service = CacheService()
