@@ -9,10 +9,5 @@
             "entrypoint": "backend/app/main.py",
             "routePrefix": "/_/backend"
         }
-    },
-    "functions": {
-        "backend/app/main.py": {
-            "maxDuration": 60
-        }
     }
 }
